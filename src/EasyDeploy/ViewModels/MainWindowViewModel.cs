@@ -18,6 +18,7 @@ using System.Windows.Media;
 using System.Windows.Input;
 using System.Windows.Data;
 using System.Windows.Controls;
+using System.Windows.Threading;
 
 namespace EasyDeploy.ViewModels
 {
@@ -76,10 +77,7 @@ namespace EasyDeploy.ViewModels
                         {
                             foreach (var item in Services.Where(o => o.AutoStart))
                             {
-                                Application.Current?.Dispatcher?.Invoke(() =>
-                                {
-                                    StartServiceCore(item, true);
-                                });
+                                StartServiceCore(item, true);
                             }
                         }
                     }
@@ -215,42 +213,38 @@ namespace EasyDeploy.ViewModels
                 serviceResources.MonitorShell();
                 serviceResources.CliWrap.Start();
                 // 通过返回的进程 ID 判断是否运行成功
-                Timer timer = new Timer(1000);
-                timer.Elapsed += delegate (object senderTimer, ElapsedEventArgs eTimer)
-                {
-                    timer.Enabled = false;
-                    Application.Current?.Dispatcher?.Invoke(() =>
-                    {
-                        if (serviceResources.CliWrap != null && serviceResources.CliWrap.threadID > 0)
-                        {
-                            // 启动成功
-                            Service.Pid = $"{serviceResources.CliWrap.threadID}";
-                            var vProcessPorts = PidHelper.GetProcessPorts(serviceResources.CliWrap.threadID);
-                            if (vProcessPorts != null && vProcessPorts.Count >= 1)
-                            {
-                                Service.Port = string.Join('/', PidHelper.GetProcessPorts(serviceResources.CliWrap.threadID));
-                            }
-                            // 添加到服务运行时资源列表
-                            if (ServicesResources.ContainsKey(strGuid))
-                            {
-                                ServicesResources[strGuid] = serviceResources;
-                            }
-                            else
-                            {
-                                ServicesResources.Add(strGuid, serviceResources);
-                            }
-                            // 添加到服务控制台绑定控件
-                            ServicesShell.Add(strGuid, new TabControlTerminalModel() { Header = Service.ServiceName, Control = serviceResources.Terminal });
-                            Service.ServiceState = ServiceState.Start;
-                        }
-                        else
-                        {
-                            // 启动失败
-                            Service.ServiceState = ServiceState.Error;
-                        }
-                    });
-                };
-                timer.Enabled = true;
+                DispatcherTimer timer = new DispatcherTimer();
+                timer.Interval = TimeSpan.FromSeconds(1);
+                timer.Tick += (o, e) =>
+                 {
+                     if (serviceResources.CliWrap != null && serviceResources.CliWrap.threadID > 0)
+                     {
+                        // 启动成功
+                        Service.Pid = $"{serviceResources.CliWrap.threadID}";
+                         var vProcessPorts = PidHelper.GetProcessPorts(serviceResources.CliWrap.threadID);
+                         if (vProcessPorts != null && vProcessPorts.Count >= 1)
+                         {
+                             Service.Port = string.Join('/', PidHelper.GetProcessPorts(serviceResources.CliWrap.threadID));
+                         }
+                        // 添加到服务运行时资源列表
+                        if (ServicesResources.ContainsKey(strGuid))
+                         {
+                             ServicesResources[strGuid] = serviceResources;
+                         }
+                         else
+                         {
+                             ServicesResources.Add(strGuid, serviceResources);
+                         }
+                        // 添加到服务控制台绑定控件
+                        ServicesShell.Add(strGuid, new TabControlTerminalModel() { Header = Service.ServiceName, Control = serviceResources.Terminal });
+                         Service.ServiceState = ServiceState.Start;
+                     }
+                     else
+                     {
+                        // 启动失败
+                        Service.ServiceState = ServiceState.Error;
+                     }
+                 };
             }
         }
 
@@ -263,10 +257,7 @@ namespace EasyDeploy.ViewModels
             {
                 return new DelegateCommand<ServiceModel>(delegate (ServiceModel Service)
                 {
-                    Application.Current?.Dispatcher?.Invoke(() =>
-                    {
-                        StartServiceCore(Service, false);
-                    });
+                    StartServiceCore(Service, false);
                 });
             }
         }
@@ -304,33 +295,29 @@ namespace EasyDeploy.ViewModels
                 {
                     // 未成功启动
                     // 等待两秒后再次检查是否获取到 PID,以 PID结束进程或
-                    Timer timer = new Timer(2000);
-                    timer.Elapsed += delegate (object senderTimer, ElapsedEventArgs eTimer)
+                    DispatcherTimer timer = new DispatcherTimer();
+                    timer.Interval = TimeSpan.FromSeconds(2);
+                    timer.Tick += (o, e) =>
                     {
-                        timer.Enabled = false;
-                        Application.Current?.Dispatcher?.Invoke(() =>
+                        if (!string.IsNullOrEmpty(Service.Pid))
                         {
-                            if (!string.IsNullOrEmpty(Service.Pid))
-                            {
-                                PidHelper.KillProcessAndChildren(int.Parse(Service.Pid));
-                            }
-                            // 移除运行时资源
-                            if (ServicesResources.ContainsKey(Service.Guid))
-                            {
-                                ServicesResources[Service.Guid].StopTimer();
-                                ServicesResources.Remove(Service.Guid);
-                            }
-                            if (ServicesShell.ContainsKey(Service.Guid))
-                            {
-                                ServicesShell.Remove(Service.Guid);
-                            }
-                            Service.Pid = null;
-                            Service.Port = null;
-                            Service.Guid = null;
-                            Service.ServiceState = ServiceState.None;
-                        });
+                            PidHelper.KillProcessAndChildren(int.Parse(Service.Pid));
+                        }
+                        // 移除运行时资源
+                        if (ServicesResources.ContainsKey(Service.Guid))
+                        {
+                            ServicesResources[Service.Guid].StopTimer();
+                            ServicesResources.Remove(Service.Guid);
+                        }
+                        if (ServicesShell.ContainsKey(Service.Guid))
+                        {
+                            ServicesShell.Remove(Service.Guid);
+                        }
+                        Service.Pid = null;
+                        Service.Port = null;
+                        Service.Guid = null;
+                        Service.ServiceState = ServiceState.None;
                     };
-                    timer.Enabled = true;
                 }
             }
         }
@@ -344,10 +331,7 @@ namespace EasyDeploy.ViewModels
             {
                 return new DelegateCommand<ServiceModel>(delegate (ServiceModel Service)
                 {
-                    Application.Current?.Dispatcher?.Invoke(() =>
-                    {
-                        StopServiceCore(Service);
-                    });
+                    StopServiceCore(Service);
                 });
             }
         }
@@ -586,20 +570,17 @@ namespace EasyDeploy.ViewModels
         private IceRichTextBox CreateBlankRichTextBox()
         {
             IceRichTextBox vRichText = null;
-            Application.Current?.Dispatcher?.Invoke(() =>
-            {
-                // 创建控件
-                vRichText = new IceRichTextBox();
-                vRichText.SetBinding(IceRichTextBox.MaxRowsProperty, new Binding("TerminalMaxRows") { Source = this });
-                vRichText.SetBinding(IceRichTextBox.TerminalBackgroundProperty, new Binding("TerminalBackground") { Source = this });
-                vRichText.SetBinding(IceRichTextBox.TerminalForegroundProperty, new Binding("TerminalForeground") { Source = this });
-                vRichText.SetBinding(IceRichTextBox.TerminalFontSizeProperty, new Binding("TerminalFontSize") { Source = this });
+            // 创建控件
+            vRichText = new IceRichTextBox();
+            vRichText.SetBinding(IceRichTextBox.MaxRowsProperty, new Binding("TerminalMaxRows") { Source = this });
+            vRichText.SetBinding(IceRichTextBox.TerminalBackgroundProperty, new Binding("TerminalBackground") { Source = this });
+            vRichText.SetBinding(IceRichTextBox.TerminalForegroundProperty, new Binding("TerminalForeground") { Source = this });
+            vRichText.SetBinding(IceRichTextBox.TerminalFontSizeProperty, new Binding("TerminalFontSize") { Source = this });
 
-                // 创建后处理
-                vRichText.Init();
-                vRichText.ClearText();
-                vRichText.PreviewMouseWheel += VRichText_PreviewMouseWheel;
-            });
+            // 创建后处理
+            vRichText.Init();
+            vRichText.ClearText();
+            vRichText.PreviewMouseWheel += VRichText_PreviewMouseWheel;
             return vRichText;
         }
 
@@ -639,10 +620,7 @@ namespace EasyDeploy.ViewModels
         {
             if (ServicesShell != null && ServicesShell.Count >= 1 && ServicesShell.ContainsKey(LogShellGuid))
             {
-                Application.Current?.Dispatcher?.Invoke(() =>
-                {
-                    ServicesShell[LogShellGuid]?.Control?.SetText($"\u001b[90m{DateTime.Now}: \u001b[0m{log}");
-                });
+                ServicesShell[LogShellGuid]?.Control?.SetText($"\u001b[90m{DateTime.Now}: \u001b[0m{log}");
             }
         }
     }

@@ -115,10 +115,7 @@ namespace EasyDeploy.Models
         /// <param name="obj"></param>
         private void CliWrap_StandardOutputCommandEvent(string obj)
         {
-            Application.Current?.Dispatcher?.Invoke(() =>
-            {
                 Terminal?.SetText(obj);
-            });
         }
 
         /// <summary>
@@ -127,10 +124,7 @@ namespace EasyDeploy.Models
         /// <param name="obj"></param>
         private void CliWrap_StandardErrorCommandEvent(string obj)
         {
-            Application.Current?.Dispatcher?.Invoke(() =>
-            {
                 Terminal?.SetText(obj);
-            });
         }
 
         /// <summary>
@@ -211,10 +205,7 @@ namespace EasyDeploy.Models
         {
             if (Terminal != null)
             {
-                Application.Current?.Dispatcher?.Invoke(() =>
-                {
                     Terminal?.SetText($"\u001b[90m{DateTime.Now}: \u001b[0m{log}");
-                });
             }
         }
     }

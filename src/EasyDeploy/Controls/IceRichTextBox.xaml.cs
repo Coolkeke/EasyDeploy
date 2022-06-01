@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -141,6 +142,7 @@ namespace EasyDeploy.Controls
                 else
                 {
                     paragraph.Inlines.Add(SetColorFromAnsi(new Run() { Text = item }, ansiColor));
+
                 }
             }
             rtb.BeginChange();
@@ -156,15 +158,13 @@ namespace EasyDeploy.Controls
                 {
                     rtb.ScrollToEnd();
                 }
-            }
-        }
-
-        /// <summary>
-        /// 根据 Ansi 设置文本颜色
-        /// </summary>
-        /// <param name="run">文本</param>
-        /// <param name="ansiColor">ansi 颜色</param>
-        /// <returns></returns>
+            };
+        } /// <summary>
+          /// 根据 Ansi 设置文本颜色
+          /// </summary>
+          /// <param name="run">文本</param>
+          /// <param name="ansiColor">ansi 颜色</param>
+          /// <returns></returns>
         private Run SetColorFromAnsi(Run run, string ansiColor)
         {
             if (string.IsNullOrEmpty(ansiColor))
