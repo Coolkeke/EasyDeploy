@@ -229,7 +229,6 @@ namespace EasyDeploy.ViewModels
                 timer.Interval = TimeSpan.FromSeconds(1);
                 timer.Tick += (o, e) =>
                  {
-                     timer.IsEnabled = false;
                      Application.Current.Dispatcher.Invoke(() =>
                      {
                          if (serviceResources.CliWrap != null && serviceResources.CliWrap.threadID > 0)
@@ -259,8 +258,8 @@ namespace EasyDeploy.ViewModels
                              // 启动失败
                              Service.ServiceState = ServiceState.Error;
                          }
+                         timer.Stop();
                      });
-                     timer.IsEnabled = true;
                  };
                 timer.Start();
             }
@@ -317,7 +316,6 @@ namespace EasyDeploy.ViewModels
                     timer.Interval = TimeSpan.FromSeconds(2);
                     timer.Tick += (o, e) =>
                     {
-                        timer.IsEnabled = false;
                         Application.Current.Dispatcher.Invoke(() =>
                         {
                             if (!string.IsNullOrEmpty(Service.Pid))
@@ -338,8 +336,8 @@ namespace EasyDeploy.ViewModels
                             Service.Port = null;
                             Service.Guid = null;
                             Service.ServiceState = ServiceState.None;
+                            timer.Stop();
                         });
-                        timer.IsEnabled = true;
                     };
                     timer.Start();
                 }
