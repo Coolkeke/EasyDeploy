@@ -113,18 +113,30 @@ namespace EasyDeploy.ViewModels
         /// <summary>
         /// 服务信息集合
         /// </summary>
-        public ObservableCollection<ServiceModel> Services { get; set; } = new ObservableCollection<ServiceModel>();
-
+        private ObservableCollection<ServiceModel> _Services = new ObservableCollection<ServiceModel>();
+        public ObservableCollection<ServiceModel> Services
+        {
+            get { return _Services; }
+            set { SetProperty(ref _Services, value); }
+        }
         /// <summary>
         /// 服务运行时资源
         /// </summary>
-        public ObservableDictionary<string, ServiceResourcesModel> ServicesResources { get; set; } = new ObservableDictionary<string, ServiceResourcesModel>();
-
+        private ObservableDictionary<string, ServiceResourcesModel> _ServicesResources= new ObservableDictionary<string, ServiceResourcesModel>();
+        public ObservableDictionary<string, ServiceResourcesModel> ServicesResources
+        {
+            get { return _ServicesResources; }
+            set { SetProperty(ref _ServicesResources, value); }
+        }
         /// <summary>
         /// 服务控制台绑定控件
         /// </summary>
-        public ObservableDictionary<string, TabControlTerminalModel> ServicesShell { get; set; } = new ObservableDictionary<string, TabControlTerminalModel>();
-
+        private ObservableDictionary<string, TabControlTerminalModel> _ServicesShell = new ObservableDictionary<string, TabControlTerminalModel>();
+        public ObservableDictionary<string, TabControlTerminalModel> ServicesShell
+        {
+            get { return _ServicesShell; }
+            set { SetProperty(ref _ServicesShell, value); }
+        }
         /// <summary>
         /// 日志 Shell Guid
         /// </summary>
@@ -217,34 +229,40 @@ namespace EasyDeploy.ViewModels
                 timer.Interval = TimeSpan.FromSeconds(1);
                 timer.Tick += (o, e) =>
                  {
-                     if (serviceResources.CliWrap != null && serviceResources.CliWrap.threadID > 0)
+                     timer.IsEnabled = false;
+                     Application.Current.Dispatcher.Invoke(() =>
                      {
-                        // 启动成功
-                        Service.Pid = $"{serviceResources.CliWrap.threadID}";
-                         var vProcessPorts = PidHelper.GetProcessPorts(serviceResources.CliWrap.threadID);
-                         if (vProcessPorts != null && vProcessPorts.Count >= 1)
+                         if (serviceResources.CliWrap != null && serviceResources.CliWrap.threadID > 0)
                          {
-                             Service.Port = string.Join('/', PidHelper.GetProcessPorts(serviceResources.CliWrap.threadID));
-                         }
-                        // 添加到服务运行时资源列表
-                        if (ServicesResources.ContainsKey(strGuid))
-                         {
-                             ServicesResources[strGuid] = serviceResources;
+                             // 启动成功
+                             Service.Pid = $"{serviceResources.CliWrap.threadID}";
+                             var vProcessPorts = PidHelper.GetProcessPorts(serviceResources.CliWrap.threadID);
+                             if (vProcessPorts != null && vProcessPorts.Count >= 1)
+                             {
+                                 Service.Port = string.Join('/', PidHelper.GetProcessPorts(serviceResources.CliWrap.threadID));
+                             }
+                             // 添加到服务运行时资源列表
+                             if (ServicesResources.ContainsKey(strGuid))
+                             {
+                                 ServicesResources[strGuid] = serviceResources;
+                             }
+                             else
+                             {
+                                 ServicesResources.Add(strGuid, serviceResources);
+                             }
+                             // 添加到服务控制台绑定控件
+                             ServicesShell.Add(strGuid, new TabControlTerminalModel() { Header = Service.ServiceName, Control = serviceResources.Terminal });
+                             Service.ServiceState = ServiceState.Start;
                          }
                          else
                          {
-                             ServicesResources.Add(strGuid, serviceResources);
+                             // 启动失败
+                             Service.ServiceState = ServiceState.Error;
                          }
-                        // 添加到服务控制台绑定控件
-                        ServicesShell.Add(strGuid, new TabControlTerminalModel() { Header = Service.ServiceName, Control = serviceResources.Terminal });
-                         Service.ServiceState = ServiceState.Start;
-                     }
-                     else
-                     {
-                        // 启动失败
-                        Service.ServiceState = ServiceState.Error;
-                     }
+                     });
+                     timer.IsEnabled = true;
                  };
+                timer.Start();
             }
         }
 
@@ -299,25 +317,31 @@ namespace EasyDeploy.ViewModels
                     timer.Interval = TimeSpan.FromSeconds(2);
                     timer.Tick += (o, e) =>
                     {
-                        if (!string.IsNullOrEmpty(Service.Pid))
+                        timer.IsEnabled = false;
+                        Application.Current.Dispatcher.Invoke(() =>
                         {
-                            PidHelper.KillProcessAndChildren(int.Parse(Service.Pid));
-                        }
-                        // 移除运行时资源
-                        if (ServicesResources.ContainsKey(Service.Guid))
-                        {
-                            ServicesResources[Service.Guid].StopTimer();
-                            ServicesResources.Remove(Service.Guid);
-                        }
-                        if (ServicesShell.ContainsKey(Service.Guid))
-                        {
-                            ServicesShell.Remove(Service.Guid);
-                        }
-                        Service.Pid = null;
-                        Service.Port = null;
-                        Service.Guid = null;
-                        Service.ServiceState = ServiceState.None;
+                            if (!string.IsNullOrEmpty(Service.Pid))
+                            {
+                                PidHelper.KillProcessAndChildren(int.Parse(Service.Pid));
+                            }
+                            // 移除运行时资源
+                            if (ServicesResources.ContainsKey(Service.Guid))
+                            {
+                                ServicesResources[Service.Guid].StopTimer();
+                                ServicesResources.Remove(Service.Guid);
+                            }
+                            if (ServicesShell.ContainsKey(Service.Guid))
+                            {
+                                ServicesShell.Remove(Service.Guid);
+                            }
+                            Service.Pid = null;
+                            Service.Port = null;
+                            Service.Guid = null;
+                            Service.ServiceState = ServiceState.None;
+                        });
+                        timer.IsEnabled = true;
                     };
+                    timer.Start();
                 }
             }
         }
@@ -569,19 +593,30 @@ namespace EasyDeploy.ViewModels
         /// <returns></returns>
         private IceRichTextBox CreateBlankRichTextBox()
         {
-            IceRichTextBox vRichText = null;
-            // 创建控件
-            vRichText = new IceRichTextBox();
-            vRichText.SetBinding(IceRichTextBox.MaxRowsProperty, new Binding("TerminalMaxRows") { Source = this });
-            vRichText.SetBinding(IceRichTextBox.TerminalBackgroundProperty, new Binding("TerminalBackground") { Source = this });
-            vRichText.SetBinding(IceRichTextBox.TerminalForegroundProperty, new Binding("TerminalForeground") { Source = this });
-            vRichText.SetBinding(IceRichTextBox.TerminalFontSizeProperty, new Binding("TerminalFontSize") { Source = this });
+            try
+            {
+                IceRichTextBox vRichText = null;
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    // 创建控件
+                    vRichText = new IceRichTextBox();
+                    vRichText.SetBinding(IceRichTextBox.MaxRowsProperty, new Binding("TerminalMaxRows") { Source = this });
+                    vRichText.SetBinding(IceRichTextBox.TerminalBackgroundProperty, new Binding("TerminalBackground") { Source = this });
+                    vRichText.SetBinding(IceRichTextBox.TerminalForegroundProperty, new Binding("TerminalForeground") { Source = this });
+                    vRichText.SetBinding(IceRichTextBox.TerminalFontSizeProperty, new Binding("TerminalFontSize") { Source = this });
 
-            // 创建后处理
-            vRichText.Init();
-            vRichText.ClearText();
-            vRichText.PreviewMouseWheel += VRichText_PreviewMouseWheel;
-            return vRichText;
+                    // 创建后处理
+                    vRichText.Init();
+                    vRichText.ClearText();
+                    vRichText.PreviewMouseWheel += VRichText_PreviewMouseWheel;
+                });
+                return vRichText;
+            }
+            catch (Exception ex)
+            {
+
+                throw ex;
+            }
         }
 
         /// <summary>
@@ -616,11 +651,11 @@ namespace EasyDeploy.ViewModels
         /// 写入日志
         /// </summary>
         /// <param name="log"></param>
-        private void SetLog(string log)
+        private async void SetLog(string log)
         {
             if (ServicesShell != null && ServicesShell.Count >= 1 && ServicesShell.ContainsKey(LogShellGuid))
             {
-                ServicesShell[LogShellGuid]?.Control?.SetText($"\u001b[90m{DateTime.Now}: \u001b[0m{log}");
+                await ServicesShell[LogShellGuid]?.Control?.SetText($"\u001b[90m{DateTime.Now}: \u001b[0m{log}");
             }
         }
     }

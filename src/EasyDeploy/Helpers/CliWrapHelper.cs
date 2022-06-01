@@ -78,7 +78,7 @@ namespace EasyDeploy.Helpers
         /// <summary>
         /// 启动
         /// </summary>
-        public bool Start()
+        public  bool Start()
         {
             if (!string.IsNullOrEmpty(_applicationName))
             {

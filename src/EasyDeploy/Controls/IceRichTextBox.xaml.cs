@@ -111,54 +111,69 @@ namespace EasyDeploy.Controls
         /// 添加文本
         /// </summary>
         /// <param name="Text"></param>
-        public void SetText(string Text)
+        public Task SetText(string Text)
         {
-            // 根据最大显示行数删除
-            int iRempveNumber = TerminalDocument.Blocks.Count - MaxRows;
-            if (iRempveNumber >= 1)
+            return Task.Run(async () =>
             {
-                for (int i = 0; i < iRempveNumber; i++)
+                try
                 {
-                    foreach (var item in TerminalDocument.Blocks)
+                    await this.Dispatcher.BeginInvoke(new Action(() =>
                     {
+                        int iRempveNumber = TerminalDocument.Blocks.Count - MaxRows;
+                        if (iRempveNumber >= 1)
+                        {
+                            for (int i = 0; i < iRempveNumber; i++)
+                            {
+                                foreach (var item in TerminalDocument.Blocks)
+                                {
+                                    rtb.BeginChange();
+                                    TerminalDocument.Blocks.Remove(item as Paragraph);
+                                    rtb.EndChange();
+                                    break;
+                                }
+                            }
+                        }
+                        // 添加文本
+                        string ansiColor = null;
+                        Paragraph paragraph = new Paragraph();
+                        foreach (var item in AnsiHelper.GetAnsiSplit(Text))
+                        {
+                            if (item.Contains(AnsiHelper.AnsiStart))
+                            {
+                                // 设置颜色
+                                ansiColor = item;
+                            }
+                            else
+                            {
+                                paragraph.Inlines.Add(SetColorFromAnsi(new Run() { Text = item }, ansiColor));
+                            }
+                        }
                         rtb.BeginChange();
-                        TerminalDocument.Blocks.Remove(item as Paragraph);
+                        TerminalDocument.Blocks.Add(paragraph);
                         rtb.EndChange();
-                        break;
-                    }
-                }
-            }
 
-            // 添加文本
-            string ansiColor = null;
-            Paragraph paragraph = new Paragraph();
-            foreach (var item in AnsiHelper.GetAnsiSplit(Text))
-            {
-                if (item.Contains(AnsiHelper.AnsiStart))
-                {
-                    // 设置颜色
-                    ansiColor = item;
-                }
-                else
-                {
-                    paragraph.Inlines.Add(SetColorFromAnsi(new Run() { Text = item }, ansiColor));
+                        // 如果滚动条不在最底部时继续判断
+                        // 达到最大行数后滚动条会保持在最底部
+                        if (rtb.VerticalOffset + this.ActualHeight != rtb.ExtentHeight)
+                        {
+                            // 滚动条超过 80% 或滚动条小于一倍控件高度 滚动到底部
+                            if (rtb.VerticalOffset / (rtb.ExtentHeight - this.ActualHeight) >= 0.8 || (rtb.ExtentHeight - this.ActualHeight) <= this.ActualHeight)
+                            {
+                                rtb.ScrollToEnd();
+                            }
+                        };
 
+                    }));
                 }
-            }
-            rtb.BeginChange();
-            TerminalDocument.Blocks.Add(paragraph);
-            rtb.EndChange();
-
-            // 如果滚动条不在最底部时继续判断
-            // 达到最大行数后滚动条会保持在最底部
-            if (rtb.VerticalOffset + this.ActualHeight != rtb.ExtentHeight)
-            {
-                // 滚动条超过 80% 或滚动条小于一倍控件高度 滚动到底部
-                if (rtb.VerticalOffset / (rtb.ExtentHeight - this.ActualHeight) >= 0.8 || (rtb.ExtentHeight - this.ActualHeight) <= this.ActualHeight)
+                catch (Exception ex)
                 {
-                    rtb.ScrollToEnd();
+
+                    throw;
                 }
-            };
+                // 根据最大显示行数删除
+
+            });
+
         } /// <summary>
           /// 根据 Ansi 设置文本颜色
           /// </summary>

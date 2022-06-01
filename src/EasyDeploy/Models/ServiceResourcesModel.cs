@@ -62,19 +62,16 @@ namespace EasyDeploy.Models
         /// <param name="obj"></param>
         private void CliWrap_StartedCommandEvent(string obj)
         {
-            Application.Current?.Dispatcher?.Invoke(() =>
+            SetLog($"Start Service PID:{obj}");
+            Pid = obj;
+            // 获取到 PID 后启动健康检查
+            timerPerSecond = new DispatcherTimer()
             {
-                SetLog($"Start Service PID:{obj}");
-                Pid = obj;
-                // 获取到 PID 后启动健康检查
-                timerPerSecond = new DispatcherTimer()
-                {
-                    IsEnabled = false
-                };
-                timerPerSecond.Interval = TimeSpan.FromSeconds(30);
-                timerPerSecond.Tick += TimerPerSecondCallback;
-                timerPerSecond?.Start();
-            });
+                IsEnabled = false
+            };
+            timerPerSecond.Interval = TimeSpan.FromSeconds(30);
+            timerPerSecond.Tick += TimerPerSecondCallback;
+            timerPerSecond?.Start();
         }
 
         /// <summary>
@@ -83,22 +80,19 @@ namespace EasyDeploy.Models
         /// <param name="state"></param>
         public void TimerPerSecondCallback(object sender, EventArgs e)
         {
-            Task.Run(() =>
+            if (!PidHelper.GetProcessIsOnline(int.Parse(Pid)))
             {
-                if (!PidHelper.GetProcessIsOnline(int.Parse(Pid)))
+                SetLog($"Error Stop Service:{Pid}");
+                timerPerSecond?.Stop();
+                Service.ServiceState = ServiceState.Error;
+                // 尝试重启
+                CliWrap?.Stop();
+                CliWrap = null;
+                if (Service.AutoReStart)
                 {
-                    SetLog($"Error Stop Service:{Pid}");
-                    timerPerSecond?.Stop();
-                    Service.ServiceState = ServiceState.Error;
-                    // 尝试重启
-                    CliWrap?.Stop();
-                    CliWrap = null;
-                    if (Service.AutoReStart)
-                    {
-                        ReCliWrap();
-                    }
+                    ReCliWrap();
                 }
-            });
+            }
         }
 
         /// <summary>
@@ -113,18 +107,18 @@ namespace EasyDeploy.Models
         /// 标准输出命令事件
         /// </summary>
         /// <param name="obj"></param>
-        private void CliWrap_StandardOutputCommandEvent(string obj)
+        private async void CliWrap_StandardOutputCommandEvent(string obj)
         {
-                Terminal?.SetText(obj);
+            await Terminal?.SetText(obj);
         }
 
         /// <summary>
         /// 标准错误命令事件
         /// </summary>
         /// <param name="obj"></param>
-        private void CliWrap_StandardErrorCommandEvent(string obj)
+        private async void CliWrap_StandardErrorCommandEvent(string obj)
         {
-                Terminal?.SetText(obj);
+            await Terminal?.SetText(obj);
         }
 
         /// <summary>
@@ -133,19 +127,16 @@ namespace EasyDeploy.Models
         /// <param name="obj"></param>
         private void CliWrap_ExitedCommandEvent(string obj)
         {
-            Application.Current?.Dispatcher?.Invoke(() =>
+            SetLog($"Stop Service:{obj}");
+            timerPerSecond?.Stop();
+            Service.ServiceState = ServiceState.Error;
+            // 尝试重启
+            CliWrap?.Stop();
+            CliWrap = null;
+            if (Service.AutoReStart)
             {
-                SetLog($"Stop Service:{obj}");
-                timerPerSecond?.Stop();
-                Service.ServiceState = ServiceState.Error;
-                // 尝试重启
-                CliWrap?.Stop();
-                CliWrap = null;
-                if (Service.AutoReStart)
-                {
-                    ReCliWrap();
-                }
-            });
+                ReCliWrap();
+            }
         }
 
         /// <summary>
@@ -166,46 +157,42 @@ namespace EasyDeploy.Models
             MonitorShell();
             CliWrap.Start();
             // 通过返回的进程 ID 判断是否运行成功
-            Timer timer = new Timer(1000);
-            timer.Elapsed += delegate (object senderTimer, ElapsedEventArgs eTimer)
-            {
-                timer.Enabled = false;
-                Application.Current?.Dispatcher?.Invoke(() =>
-                {
-                    if (CliWrap != null && CliWrap.threadID > 0)
-                    {
-                        // 启动成功
-                        Service.Pid = $"{CliWrap.threadID}";
-                        var vProcessPorts = PidHelper.GetProcessPorts(CliWrap.threadID);
-                        if (vProcessPorts != null && vProcessPorts.Count >= 1)
-                        {
-                            Service.Port = string.Join('/', PidHelper.GetProcessPorts(CliWrap.threadID));
-                        }
-                        Service.ServiceState = ServiceState.Start;
-                    }
-                    else
-                    {
-                        // 启动失败
-                        Service.ServiceState = ServiceState.Error;
-                        // 等待片刻后重新尝试启动
-                        System.Threading.Thread.Sleep(30000);
-                        CliWrap = null;
-                        ReCliWrap();
-                    }
-                });
-            };
-            timer.Enabled = true;
+            DispatcherTimer timer = new DispatcherTimer();
+            timer.Interval = TimeSpan.FromSeconds(1);
+            timer.Tick += (senderTimer, eTimer) =>
+             {
+                 if (CliWrap != null && CliWrap.threadID > 0)
+                 {
+                     // 启动成功
+                     Service.Pid = $"{CliWrap.threadID}";
+                     var vProcessPorts = PidHelper.GetProcessPorts(CliWrap.threadID);
+                     if (vProcessPorts != null && vProcessPorts.Count >= 1)
+                     {
+                         Service.Port = string.Join('/', PidHelper.GetProcessPorts(CliWrap.threadID));
+                     }
+                     Service.ServiceState = ServiceState.Start;
+                 }
+                 else
+                 {
+                     // 启动失败
+                     Service.ServiceState = ServiceState.Error;
+                     // 等待片刻后重新尝试启动
+                     System.Threading.Thread.Sleep(30000);
+                     CliWrap = null;
+                     ReCliWrap();
+                 }
+             };
         }
 
         /// <summary>
         /// 写入系统日志
         /// </summary>
         /// <param name="log"></param>
-        private void SetLog(string log)
+        private async void SetLog(string log)
         {
             if (Terminal != null)
             {
-                    Terminal?.SetText($"\u001b[90m{DateTime.Now}: \u001b[0m{log}");
+                await Terminal?.SetText($"\u001b[90m{DateTime.Now}: \u001b[0m{log}");
             }
         }
     }
